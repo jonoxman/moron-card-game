@@ -1,3 +1,5 @@
+import random
+
 class card: 
     #A card is a data class that stores a rank and a suit.
     def __init__(self, rank, suit):
@@ -13,16 +15,27 @@ class deck:
         self.cards = []
         suits = ["spades", "hearts", "clubs", "diamonds"]
         for s in suits:
-            for i in range(6, 14): #ranks range from 6 to 14, where jack = 11, queen = 12, king = 13, ace = 14
+            for i in range(6, 15): #ranks range from 6 to 14, where jack = 11, queen = 12, king = 13, ace = 14
                 self.cards.append(card(i, s)) #add cards to the deck in order
     
     
     def shuffle(self):
+        random.shuffle(self.cards)
         
     
     
     
     
 if __name__ == "__main__":
-    Deck d = Deck()
+    d = deck()
+    for c in d.cards:
+        print(c.suit)
+        print(c.rank)
+    
+    d.shuffle()
+    for c in d.cards:
+        print(c.suit)
+        print(c.rank)
+    
+    input('press any key to finish')
     

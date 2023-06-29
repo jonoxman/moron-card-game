@@ -58,6 +58,9 @@ class Deck:
             for i in range(6, 15): # ranks range from 6 to 14, where jack = 11, queen = 12, king = 13, ace = 14
                 self.cards.append(Card(i, s)) #add cards to the deck in order
 
+    def num_cards(self):
+        return len(self.cards)
+    
     def shuffle(self):
         '''Shuffle the cards stored in this deck.'''
         random.shuffle(self.cards)
@@ -122,20 +125,24 @@ class HumanPlayer(Player):
     def __init__(self, name):
         super().__init__(name)
 
-    def generate_move(self):
+    def generate_attack(self):
         nl = "\n" # Escape sequences are not allowed in f-strings.
         self.sort_hand() # This can be done here, since the only purpose of sorting your hand is for readability.
         print(f"{self.name}, you have {self.num_cards()} cards. They are:\n{nl.join(f'{i + 1}. {self.hand[i]}' for i in range(self.num_cards()))}")
         invalid_input = True
         while invalid_input:
-            s = input("\nWhat would you like to play? (enter a number displayed above):\n")
-            if s.isdigit() and int(s) <= self.num_cards() and int(s) != 0:
+            s = input("\nWhat would you like to attack with? Enter a number displayed above, or 'pass' if you are done attacking:\n")
+            if s == 'pass' or (s.isdigit() and int(s) <= self.num_cards() and int(s) != 0):
                 invalid_input = False
                 break
             
             print("Invalid input.")
-        result = int(s) - 1
-        return self.hand[result]
+        if s == 'pass':
+            result = None
+        else:
+            index = int(s) - 1
+            result = (self.hand[index], index)
+        return result
     
 class Game:
     '''
@@ -161,13 +168,52 @@ class Game:
         When a round is initialized, the first player passed into it is the attacker for the round, and is the one who is prompted for attack. 
         The Round class keeps track of which player was the original attacker, since this player must draw first regardless of whether a reflection was played.'''
         
-        def __init__(self, p1, p2):
+        def __init__(self, p1, p2, d):
             self.attacker = p1
             self.defender = p2
-            self.attacking_card = None
+            self.deck = d
+            self.defender_turn = False
+            self.attacking_cards = []
             self.card_pool = []
             self.result = None
+        
+        def execute_move(self, player, index):
+            card = player.hand.pop(index)
+            self.card_pool.append(card)
 
+
+        def round_info(self):
+            '''
+            Returns information about current status of the round in String form. (This is a helper method for output only.)
+            The status includes:
+            - The name of the player whose move it is, and their current position (attacker or defender). 
+            - The number of cards each player has.
+            - If it is the defender's turn, the current attacking card(s) in play.
+            - If it is the attacker's turn, and a card has already been played, the current pool of playable cards for additional attacks.
+            '''
+
+            if self.defender_turn:
+                p = self.defender
+                s = "defending"
+                sentence = f"You need to defend against {', '.join(card for card in self.attacking_cards)}."
+            else:
+                p = self.attacker
+                s = "attacking"
+                sentence = f"The cards that have been played so far are {', '.join(card for card in self.card_pool)}."
+
+            result = f"{p.name}, it's your turn. You are currently {s}. {sentence}"
+            return result
+
+
+        def start_round(self):
+            #todo
+            while not self.result:
+                # It's the attacker's turn first.
+                print(self.round_info)
+                attack = self.attacker.generate_attack()
+                
+
+            return self.result # The return value is the player object of the winning player.
         
 
 
@@ -176,7 +222,7 @@ class Game:
         match p2name:
             case _:
                 self.player2 = HumanPlayer(p2name)
-                self.both_human = True
+                self.both_human = True # The point of this flag is to know whether we should clear the whole screen when each player plays (to prevent each player from seeing the other's hand).
         self.deck = Deck()
         self.deck.shuffle()
         self.deck.choose_trump()
@@ -202,7 +248,7 @@ if __name__ == "__main__":
     for i in range(6):
         p.hand.append(d.draw())
     
-    card = p.generate_move()
+    card = p.generate_attack()
     
     print(f"You played a {card}")
 

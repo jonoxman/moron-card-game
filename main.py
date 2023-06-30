@@ -10,11 +10,12 @@ class Card:
         self.suit = suit
         self.is_trump = False
 
-    def rank_name(self):
+    @staticmethod
+    def rank_to_name(rank):
         '''
-        Return the English name of the card's rank (named cards are internally stored as numbers above 10).
+        Return the English name of a card's rank, given the rank id (named cards are internally stored as numbers above 10).
         '''
-        match self.rank:
+        match rank:
             case 11:
                 return "Jack"
             case 12:
@@ -24,7 +25,13 @@ class Card:
             case 14:
                 return "Ace"
             case _:
-                return str(self.rank)
+                return str(rank)
+
+    def rank_name(self):
+        '''
+        Return the English name of the card's rank (named cards are internally stored as numbers above 10).
+        '''
+        return Card.rank_to_name(self.rank)
 
     def suit_name(self):
         '''
@@ -39,6 +46,16 @@ class Card:
                 return "Clubs"
             case 3:
                 return "Diamonds"
+
+
+    def __lt__(self, other):
+        # A card is less than another if it has lower rank and they are the same suit, or if the other card is a trump and they have different suits. 
+        if self.suit == other.suit:
+            if self.rank < other.rank: 
+                return True
+        elif other.is_trump: 
+            return True
+        return False
 
     def __str__(self):
         if self.is_trump: # In this case, highlight the card a bit more
@@ -125,23 +142,32 @@ class HumanPlayer(Player):
     def __init__(self, name):
         super().__init__(name)
 
-    def generate_attack(self):
+    def generate_attack(self, playable_ranks):
+        '''Generates an attack (in the case of the human player, "generation" is made via user input).
+        Takes a parameter of the current card pool (i.e. which cards have been played this round). If this parameter is an empty list, any card may be played.
+        '''
+
         nl = "\n" # Escape sequences are not allowed in f-strings.
         self.sort_hand() # This can be done here, since the only purpose of sorting your hand is for readability.
         print(f"{self.name}, you have {self.num_cards()} cards. They are:\n{nl.join(f'{i + 1}. {self.hand[i]}' for i in range(self.num_cards()))}")
         invalid_input = True
         while invalid_input:
             s = input("\nWhat would you like to attack with? Enter a number displayed above, or 'pass' if you are done attacking:\n")
-            if s == 'pass' or (s.isdigit() and int(s) <= self.num_cards() and int(s) != 0):
-                invalid_input = False
-                break
-            
-            print("Invalid input.")
-        if s == 'pass':
-            result = None
-        else:
-            index = int(s) - 1
-            result = (self.hand[index], index)
+            if not (s == 'pass' or (s.isdigit() and int(s) <= self.num_cards() and int(s) != 0)): # An absolutely invalid input was made
+                print("Invalid input.")
+            elif s == 'pass': # 'pass' was inputed
+                if not playable_ranks: # playable_ranks is empty, so this is the first attack of the round.
+                    print("You cannot pass on your first attack of the round!")
+                else:
+                    invalid_input = False
+                    result = None
+            else: # We have a valid numerical input
+                index = int(s) - 1
+                if not playable_ranks or self.hand[index].rank in playable_ranks:
+                    invalid_input = False
+                    result = (self.hand[index], index)
+                else: # If we got here, playable_ranks is not empty, so this will never look bad
+                    print(f"You cannot play that card! The available plays are: {', '.join(f'{Card.rank_to_name(rank)}' for rank in playable_ranks)}")
         return result
     
 class Game:
@@ -177,7 +203,12 @@ class Game:
             self.card_pool = []
             self.result = None
         
-        def execute_move(self, player, index):
+        def execute_move(self, player, index, type):
+            '''Execute a move, passed in as a parameter in the form of the player moving, and the card they are using (marked by index in the player's hand), as well as the type of move.
+            A player's hand should always be sorted using Player.sort_hand() before this method is called, or the excuted move will not match the prompt.
+            The type parameter is an integer between 
+            '''
+
             card = player.hand.pop(index)
             self.card_pool.append(card)
 
@@ -207,13 +238,22 @@ class Game:
 
         def start_round(self):
             #todo
-            while not self.result:
-                # It's the attacker's turn first.
-                print(self.round_info)
-                attack = self.attacker.generate_attack()
-                
+            # It's the attacker's turn first.
+            print(self.round_info())
+            attack = self.attacker.generate_attack()
+            while not self.winner:
+                self.defender_turn = True
+                print(self.round_info())
+                defense = self.defender.generate_defense()
+                if not defense:
+                    self.winner = self.attacker
+                attack = self.defender.generate_attack()
+                if not attack:
+                    self.winner = self.defender
 
-            return self.result # The return value is the player object of the winning player.
+
+
+            return self.winner # The return value is the player object of the winning player.
         
 
 
@@ -248,9 +288,9 @@ if __name__ == "__main__":
     for i in range(6):
         p.hand.append(d.draw())
     
-    card = p.generate_attack()
+    card = p.generate_attack([])
     
-    print(f"You played a {card}")
+    print(f"You played a {card[0]}")
 
     input('press any key to finish')
     

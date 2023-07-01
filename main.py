@@ -26,6 +26,18 @@ class Card:
                 return "Ace"
             case _:
                 return str(rank)
+            
+    @staticmethod
+    def lt_several(first, second):
+        '''
+        Precondition: first and second have the same length.
+        Given two lists of cards of equal length, compare them pairwise by index. Returns True if in every pair, the first card is less than the second card.
+        Returns False otherwise. 
+        '''
+        for i in range(len(first)):
+            if not (first[i] < second[i]):
+                return False
+        return True
 
     def rank_name(self):
         '''
@@ -46,7 +58,6 @@ class Card:
                 return "Clubs"
             case 3:
                 return "Diamonds"
-
 
     def __lt__(self, other):
         # A card is less than another if it has lower rank and they are the same suit, or if the other card is a trump and they have different suits. 
@@ -145,11 +156,17 @@ class HumanPlayer(Player):
     def generate_attack(self, playable_ranks):
         '''Generates an attack (in the case of the human player, "generation" is made via user input).
         Takes a parameter of the current card pool (i.e. which cards have been played this round). If this parameter is an empty list, any card may be played.
+        Returns a tuple consisting the card to be played, and its position in the hand after sorting. 
+        A return value of None indicates that the attacker does not wish to continue the attack.
         '''
-
         nl = "\n" # Escape sequences are not allowed in f-strings.
         self.sort_hand() # This can be done here, since the only purpose of sorting your hand is for readability.
-        print(f"{self.name}, you have {self.num_cards()} cards. They are:\n{nl.join(f'{i + 1}. {self.hand[i]}' for i in range(self.num_cards()))}")
+        print(f"\n{self.name}, you have {self.num_cards()} cards. ")
+        if not playable_ranks:
+            print ("\nNo cards have been played yet, so you may attack with any card.")
+        else:
+            print (f"\nIn this round so far, cards with rank {', '.join(Card.rank_to_name(rank) for rank in playable_ranks)} have been played.")
+        print(f"\nYour cards are:\n{nl.join(f'{i + 1}. {self.hand[i]}' for i in range(self.num_cards()))}")
         invalid_input = True
         while invalid_input:
             s = input("\nWhat would you like to attack with? Enter a number displayed above, or 'pass' if you are done attacking:\n")
@@ -169,7 +186,40 @@ class HumanPlayer(Player):
                 else: # If we got here, playable_ranks is not empty, so this will never look bad
                     print(f"You cannot play that card! The available plays are: {', '.join(f'{Card.rank_to_name(rank)}' for rank in playable_ranks)}")
         return result
-    
+
+    def generate_defense(self, incoming, ref_allowed):
+        '''Generates a defense (in the case of the human player, "generation" is made via user input).
+        Takes a parameter of the incoming cards (i.e. which cards must be defended against.), and whether a reflection is allowed (i.e. if this is the prospective first defense of the round).
+        Returns a tuple consisting of a list of cards to be played from the player's hand, 
+        and a list with the indices of the cards being played in the hand after sorting.
+        A return value of None indicates that the defender has surrendered. 
+        '''
+        nl = "\n" # Escape sequences are not allowed in f-strings.
+        self.sort_hand()
+        print(f"\n{self.name}, you have {self.num_cards()} cards. ")
+        print(f"\nYou are being attacked by the following cards: {', '.join(str(card) for card in incoming)}")
+        print(f"\nYour cards are:\n{nl.join(f'{i + 1}. {self.hand[i]}' for i in range(self.num_cards()))}")
+        invalid_input = True
+        while invalid_input:
+            s = input("\nWhat would you like to defend with? Enter a sequence of as many numbers as attacking cards, representing the cards you want to use in the order you want to use them, separated by \
+spaces (for example, '1 2 4'), or 'surrender' if you give up:\n")
+            indices = s.split(" ")
+            if not (s == 'surrender' or (all(x.isdigit() and int(x) <= self.num_cards() and int(x) != 0 for x in indices)) and len(indices) == len(incoming)): # An absolutely invalid input was made
+                print("Invalid input.")
+            elif s == 'surrender': # 'surrender' was inputted
+                invalid_input = False
+                result = None
+            else: # We have a valid numerical input
+                # TODO: At the moment, this requires the player to input the cards in the correct order as the incoming cards were placed. This is a little unintuitive (for example, the input 5 6 may win while 6 5 does not).
+                indices = [(int(x) - 1) for x in indices]
+                cards_list = [self.hand[i] for i in indices]
+                if Card.lt_several(incoming, cards_list): # We have a valid defense
+                    invalid_input = False
+                    result = (cards_list, indices)
+                else: 
+                    #TODO: It would be good to be more verbose about *why* the defense failed (which card failed to be defended against, for example)
+                    print(f"\nYou entered an invalid defense!\nYou are being attacked by the following cards: {', '.join(str(card) for card in incoming)}.\nIf you cannot defend yourself, you must surrender.")
+        return result
 class Game:
     '''
     A Game is a class representing an individual game. Games are the main class of this project. Each game has its own Deck, Players, and so on.
@@ -250,9 +300,6 @@ class Game:
                 attack = self.defender.generate_attack()
                 if not attack:
                     self.winner = self.defender
-
-
-
             return self.winner # The return value is the player object of the winning player.
         
 
@@ -273,24 +320,19 @@ class Game:
 
        # while not self.winning_player: # Game loop
 
-            
-
-
-
-
 if __name__ == "__main__":
     d = Deck()
     d.shuffle()
     d.choose_trump()
+
+    c1 = d.draw()
+    c2 = d.draw()
 
     print(f"Trumps are {d.trump_card}")
     p = HumanPlayer("Player")
     for i in range(6):
         p.hand.append(d.draw())
     
-    card = p.generate_attack([])
+    cards = p.generate_defense([c1, c2], False)[0]
     
-    print(f"You played a {card[0]}")
-
-    input('press any key to finish')
-    
+    print(f"You played a {str(cards[0])} and a {str(cards[1])}") 

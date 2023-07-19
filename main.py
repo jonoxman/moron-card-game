@@ -251,9 +251,10 @@ spaces (for example, '1 2 4'), or 'surrender' if you give up:\n")
                 invalid_input = False
                 result = None
             else: # We have a valid numerical input
+                v_d = self.valid_defenses(incoming)
                 indices = [(int(x) - 1) for x in indices]
                 defense_attempt = frozenset([self.hand[i] for i in indices])
-                if defense_attempt in self.valid_defenses(incoming):
+                if defense_attempt in v_d:
                     return defense_attempt
                 else: 
                     #TODO: It would be good to be more verbose about *why* the defense failed (which card failed to be defended against, for example)

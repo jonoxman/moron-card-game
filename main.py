@@ -209,6 +209,7 @@ class HumanPlayer(Player):
             print (f"\nIn this round so far, cards with rank {', '.join(Card.rank_to_name(rank) for rank in playable_ranks)} have been played.")
         print(f"\nYour cards are:\n{nl.join(f'{i + 1}. {self.hand[i]}' for i in range(self.num_cards()))}")
         invalid_input = True
+        v_a = self.valid_attacks(playable_ranks)
         while invalid_input:
             s = input("\nWhat would you like to attack with? Enter a number displayed above, or 'pass' if you are done attacking:\n")
             if not (s == 'pass' or (s.isdigit() and int(s) <= self.num_cards() and int(s) != 0)): # An absolutely invalid input was made
@@ -221,7 +222,7 @@ class HumanPlayer(Player):
                     result = None
             else: # We have a valid numerical input
                 index = int(s) - 1
-                if self.hand[index] in self.valid_attacks:
+                if self.hand[index] in v_a:
                     invalid_input = False
                     result = (self.hand[index], index)
                 else: # If we got here, playable_ranks is not empty, so this will never look bad
@@ -241,6 +242,7 @@ class HumanPlayer(Player):
         print(f"\nYou are being attacked by the following cards: {', '.join(str(card) for card in incoming)}")
         print(f"\nYour cards are:\n{nl.join(f'{i + 1}. {self.hand[i]}' for i in range(self.num_cards()))}")
         invalid_input = True
+        v_d = self.valid_defenses(incoming)
         while invalid_input:
             s = input("\nWhat would you like to defend with? Enter a sequence of as many numbers as attacking cards, representing the cards you want to use in the order you want to use them, separated by \
 spaces (for example, '1 2 4'), or 'surrender' if you give up:\n")
@@ -251,7 +253,6 @@ spaces (for example, '1 2 4'), or 'surrender' if you give up:\n")
                 invalid_input = False
                 result = None
             else: # We have a valid numerical input
-                v_d = self.valid_defenses(incoming)
                 indices = [(int(x) - 1) for x in indices]
                 defense_attempt = frozenset([self.hand[i] for i in indices])
                 if defense_attempt in v_d:

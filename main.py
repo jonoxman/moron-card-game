@@ -116,6 +116,49 @@ class Player:
         '''Return True if the player's hand is empty, and False otherwise.'''
         return len(self.hand)
     
+    def valid_attacks(self, _playable_ranks):
+        '''Given the current playable ranks, return a list of valid attacking cards that the Player can play next in the current round, assuming it is the player's turn.'''
+        result = []
+        for c in self.hand:
+            if c.rank in _playable_ranks:
+                result.append(c)
+        return result
+    
+    def valid_defenses(self, _incoming):
+        '''Given the current incoming attacking cards, return a list of valid defences, in Set form (i.e. order does not matter).'''
+        beaters = [] # A list of tuples consisting of each incoming card, and a list of cards in the hand that beat them. 
+        for i in range(len(_incoming)):
+            beaters.append((_incoming[i], []]))
+            for c in self.hand:
+                if c > _incoming[i]:
+                    beaters[i][1].append(c)
+        # For each incoming card, we have a list of all cards that beat it. Now, we construct a defense by playing one card at a time.
+        # We will find valid defenses by means of a tree search. 
+        
+        def make_defense_tree(curr_beaters, curr_solution):
+            '''Recursively generate a tree of all possible defenses. Return a list of all values of leaves in the tree, from the given starting root.
+            Takes a nonempty list of beating cards as generated above, as well as which of those cards has been used (i.e. assigned to a card in the current node of the tree). Also takes a Set of the partial solution at the current node.
+            The algorithm is as follows: Take the first incoming card. Try to cover it with every possible option, removing this option from the other incoming cards' lists. Recurse, removing the first incoming card each time.
+            Note that it is sufficient to consider the first card first, as in all valid defenses, this card must be covered at some point. 
+            '''
+            if not curr_beaters:
+                return curr_solution # We use sets to reduce the space taken by, multiple defenses in different orders (common occurrence with, say, multiple trumps)
+            result = []
+            for card in curr_beaters[0][1]:
+                if card not in curr_solution:
+                    curr_solution.append(card)
+                    result.extend(make_defense_tree(curr_beaters[1:], curr_solution))
+                    curr_solution.pop()
+            return set(result) # If there are no solutions, we return an empty set. 
+        result = set(make_defense_tree(beaters, []))
+        result.add(set())
+        result.remove(set()) # Remove the empty set from our set, leaving us with only the set of valid, acceptable solutions.
+
+        return result
+    
+    def valid_reflections(self): #TODO
+        return None
+
     def sort_hand(self):
         '''Sort the player's hand by suit, and by ascending order of value within each suit.'''
 
@@ -180,7 +223,7 @@ class HumanPlayer(Player):
                     result = None
             else: # We have a valid numerical input
                 index = int(s) - 1
-                if not playable_ranks or self.hand[index].rank in playable_ranks:
+                if self.hand[index] in self.valid_attacks:
                     invalid_input = False
                     result = (self.hand[index], index)
                 else: # If we got here, playable_ranks is not empty, so this will never look bad

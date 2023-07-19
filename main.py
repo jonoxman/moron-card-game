@@ -68,7 +68,7 @@ class Card:
             return True
         return False
 
-    def __str__(self):
+    def __repr__(self):
         if self.is_trump: # In this case, highlight the card a bit more
             result = f"***{self.rank_name()} of {self.suit_name()}***"
             return result.upper()
@@ -128,7 +128,7 @@ class Player:
         '''Given the current incoming attacking cards, return a list of valid defences, in Set form (i.e. order does not matter).'''
         beaters = [] # A list of tuples consisting of each incoming card, and a list of cards in the hand that beat them. 
         for i in range(len(_incoming)):
-            beaters.append((_incoming[i], []]))
+            beaters.append((_incoming[i], []))
             for c in self.hand:
                 if c > _incoming[i]:
                     beaters[i][1].append(c)
@@ -136,23 +136,21 @@ class Player:
         # We will find valid defenses by means of a tree search. 
         
         def make_defense_tree(curr_beaters, curr_solution):
-            '''Recursively generate a tree of all possible defenses. Return a list of all values of leaves in the tree, from the given starting root.
-            Takes a nonempty list of beating cards as generated above, as well as which of those cards has been used (i.e. assigned to a card in the current node of the tree). Also takes a Set of the partial solution at the current node.
+            '''Recursively generate a tree of all possible defenses. Return a list of all values of leaves in the tree, from the given current node.
+            Takes a nonempty list of beating cards as generated above, as well as a Set representing the partial solution constructed at the current node.
             The algorithm is as follows: Take the first incoming card. Try to cover it with every possible option, removing this option from the other incoming cards' lists. Recurse, removing the first incoming card each time.
-            Note that it is sufficient to consider the first card first, as in all valid defenses, this card must be covered at some point. 
-            '''
+            Note that it is sufficient to consider the first card first, as in all valid defenses, this card must be covered at some point. '''
             if not curr_beaters:
-                return curr_solution # We use sets to reduce the space taken by, multiple defenses in different orders (common occurrence with, say, multiple trumps)
-            result = []
+                return frozenset([frozenset(curr_solution)]) # We use sets to reduce the space taken by, multiple defenses in different orders (common occurrence with, say, multiple trumps)
+            result = set()
             for card in curr_beaters[0][1]:
                 if card not in curr_solution:
-                    curr_solution.append(card)
-                    result.extend(make_defense_tree(curr_beaters[1:], curr_solution))
-                    curr_solution.pop()
-            return set(result) # If there are no solutions, we return an empty set. 
-        result = set(make_defense_tree(beaters, []))
-        result.add(set())
-        result.remove(set()) # Remove the empty set from our set, leaving us with only the set of valid, acceptable solutions.
+                    result = result.union(make_defense_tree(curr_beaters[1:], curr_solution.union(set([card]))))
+            return frozenset(result) # If there are no solutions, we return an empty set. 
+        result = make_defense_tree(beaters, set())
+        foo = frozenset()
+        if foo in result:
+            result.remove(foo)
 
         return result
     
@@ -375,7 +373,11 @@ if __name__ == "__main__":
     p = HumanPlayer("Player")
     for i in range(6):
         p.hand.append(d.draw())
+
+    print(f"The player's hand is:\n{p.hand}")
+
+    print(f"The incoming cards are:\n{c1} and {c2}")
+
     
-    cards = p.generate_defense([c1, c2], False)[0]
-    
-    print(f"You played a {str(cards[0])} and a {str(cards[1])}") 
+    s = p.valid_defenses([c1, c2])
+    print(s)

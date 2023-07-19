@@ -251,12 +251,10 @@ spaces (for example, '1 2 4'), or 'surrender' if you give up:\n")
                 invalid_input = False
                 result = None
             else: # We have a valid numerical input
-                # TODO: At the moment, this requires the player to input the cards in the correct order as the incoming cards were placed. This is a little unintuitive (for example, the input 5 6 may win while 6 5 does not).
                 indices = [(int(x) - 1) for x in indices]
-                cards_list = [self.hand[i] for i in indices]
-                if Card.lt_several(incoming, cards_list): # We have a valid defense
-                    invalid_input = False
-                    result = (cards_list, indices)
+                defense_attempt = frozenset([self.hand[i] for i in indices])
+                if defense_attempt in self.valid_defenses(incoming):
+                    return defense_attempt
                 else: 
                     #TODO: It would be good to be more verbose about *why* the defense failed (which card failed to be defended against, for example)
                     print(f"\nYou entered an invalid defense!\nYou are being attacked by the following cards: {', '.join(str(card) for card in incoming)}.\nIf you cannot defend yourself, you must surrender.")
@@ -374,10 +372,4 @@ if __name__ == "__main__":
     for i in range(6):
         p.hand.append(d.draw())
 
-    print(f"The player's hand is:\n{p.hand}")
-
-    print(f"The incoming cards are:\n{c1} and {c2}")
-
-    
-    s = p.valid_defenses([c1, c2])
-    print(s)
+    p.generate_defense([c1, c2], False)

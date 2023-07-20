@@ -289,22 +289,19 @@ class Game:
             self.attacker = p1
             self.defender = p2
             self.deck = d
-            self.defender_turn = False
             self.attacking_cards = []
             self.card_pool = []
             self.result = None
         
-        def execute_move(self, player, index, type):
-            '''Execute a move, passed in as a parameter in the form of the player moving, and the card they are using (marked by index in the player's hand), as well as the type of move.
-            A player's hand should always be sorted using Player.sort_hand() before this method is called, or the excuted move will not match the prompt.
-            The type parameter is an integer between 
-            '''
+        def execute_move(self, player, _cards):
+            '''Execute a move, passed in as a parameter in the form of the player moving, and the cards they are using.
+            This method assumes that the specified move is valid - this should be verified before calling this method.'''
+            cards = set(_cards)
+            player.hand = list(set(player.hand) - cards)
+            self.card_pool.extend(cards)
+            
 
-            card = player.hand.pop(index)
-            self.card_pool.append(card)
-
-
-        def round_info(self):
+        def round_info(self, defender_turn):
             '''
             Returns information about current status of the round in String form. (This is a helper method for output only.)
             The status includes:
@@ -314,7 +311,7 @@ class Game:
             - If it is the attacker's turn, and a card has already been played, the current pool of playable cards for additional attacks.
             '''
 
-            if self.defender_turn:
+            if defender_turn:
                 p = self.defender
                 s = "defending"
                 sentence = f"You need to defend against {', '.join(card for card in self.attacking_cards)}."
@@ -328,21 +325,24 @@ class Game:
 
 
         def start_round(self):
-            #todo
             # It's the attacker's turn first.
-            print(self.round_info())
-            attack = self.attacker.generate_attack()
-            while not self.winner:
-                self.defender_turn = True
-                print(self.round_info())
+            winner = None
+            while not winner:
+                print(self.round_info(), False)
+                attack = self.attacker.generate_attack()
+                if not attack: # In the first loop, generate_attack does not allow this case
+                    winner = self.defender
+                    break
+                else:
+                    self.execute_move(self.attacker, attack)
+                print(self.round_info(), True)
                 defense = self.defender.generate_defense()
                 if not defense:
-                    self.winner = self.attacker
-                attack = self.defender.generate_attack()
-                if not attack:
-                    self.winner = self.defender
+                    winner = self.attacker
+                    break
+                else:
+                    self.execute_move(self.defender, defense)
             return self.winner # The return value is the player object of the winning player.
-        
 
 
     def __init__(self, p1name, p2name):

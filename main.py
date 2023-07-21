@@ -209,25 +209,28 @@ class HumanPlayer(Player):
     def __init__(self, name):
         super().__init__(name)
 
-    def generate_attack(self, playable_ranks):
+    def generate_attack(self, playable_ranks, card_limit):
         '''Generates an attack (in the case of the human player, "generation" is made via user input).
         Takes a parameter of the current card pool (i.e. which cards have been played this round). If this parameter is an empty list, any card may be played.
+        Also takes a parameter representing the maximum number of cards that can be played (i.e. how many cards the defender will have in their hand)
         Returns a tuple consisting the card to be played, and its position in the hand after sorting. 
         A return value of None indicates that the attacker does not wish to continue the attack.
         '''
         nl = "\n" # Escape sequences are not allowed in f-strings.
         self.sort_hand() # This can be done here, since the only purpose of sorting your hand is for readability.
-        print(f"\n{self.name}, you have {self.num_cards()} cards. ")
+        print(f"\n{self.name}, you have {self.num_cards()} cards. Your opponent has {card_limit} cards.")
         if not playable_ranks:
-            print ("\nNo cards have been played yet, so you may attack with any card.")
+            print ("\nNo cards have been played yet, so you may attack with any rank.")
         else:
             print (f"\nIn this round so far, cards with rank {', '.join(Card.rank_to_name(rank) for rank in playable_ranks)} have been played.")
         print(f"\nYour cards are:\n{nl.join(f'{i + 1}. {self.hand[i]}' for i in range(self.num_cards()))}")
         invalid_input = True
         v_a = self.valid_attacks(playable_ranks)
         while invalid_input:
-            s = input("\nWhat would you like to attack with? Enter a number displayed above, or 'pass' if you are done attacking:\n")
-            if not (s == 'pass' or (s.isdigit() and int(s) <= self.num_cards() and int(s) != 0)): # An absolutely invalid input was made
+            s = input("\nWhat would you like to attack with? Enter a sequence of as many numbers as attacking cards, representing the cards you want to use in the order you want to use them, separated by \
+spaces (for example, '1 2 4'), or 'pass' if you are done attacking:\n")
+            indices = s.split(" ")
+            if not (s == 'surrender' or (all(x.isdigit() and int(x) <= self.num_cards() and int(x) != 0 for x in indices))): # An absolutely invalid input was made
                 print("Invalid input.")
             elif s == 'pass': # 'pass' was inputed
                 if not playable_ranks: # playable_ranks is empty, so this is the first attack of the round.
@@ -235,13 +238,18 @@ class HumanPlayer(Player):
                 else:
                     invalid_input = False
                     result = None
+            elif len(indices) > card_limit:
+                print("The opponent doesn't have enough cards to defend against that! Pick fewer cards.")
             else: # We have a valid numerical input
-                index = int(s) - 1
-                if self.hand[index] in v_a:
+                attack_attempt = frozenset([self.hand[int(i) - 1] for i in indices])
+                if attack_attempt in v_a:
                     invalid_input = False
-                    result = (self.hand[index], index)
+                    result = attack_attempt
                 else: # If we got here, playable_ranks is not empty, so this will never look bad
-                    print(f"You cannot play that card! The available plays are: {', '.join(f'{Card.rank_to_name(rank)}' for rank in playable_ranks)}")
+                    if not playable_ranks:
+                        print("As your first attack, you may only play cards of a single rank.")
+                    else:
+                        print(f"You tried to play a rank that's not available! The available plays are: {', '.join(f'{Card.rank_to_name(rank)}' for rank in playable_ranks)}")
         return result
 
     def generate_defense(self, incoming, ref_allowed):
@@ -269,7 +277,7 @@ spaces (for example, '1 2 4'), or 'surrender' if you give up:\n")
                 result = None
             else: # We have a valid numerical input
                 indices = [(int(x) - 1) for x in indices]
-                defense_attempt = frozenset([self.hand[i] for i in indices])
+                defense_attempt = frozenset([self.hand[int(i) - 1] for i in indices])
                 if defense_attempt in v_d:
                     return defense_attempt
                 else: 
@@ -389,6 +397,4 @@ if __name__ == "__main__":
     for i in range(6):
         p.hand.append(d.draw())
 
-    print(p.get_rank_classes())
-
-    print(p.valid_attacks([]))
+    p.generate_attack([], 6)

@@ -116,16 +116,31 @@ class Player:
         '''Return True if the player's hand is empty, and False otherwise.'''
         return len(self.hand)
     
+    def get_rank_classes(self):
+        '''
+        Returns a dict with keys being ranks of cards in hand, and values being a set of all cards in the hand with rank being the key. 
+        '''
+        result = {}
+        for card in self.hand:
+            if card.rank in result:
+                result[card.rank].add(card)
+            else:
+                result[card.rank] = set()
+                result[card.rank].add(card)
+        return result
+
     def valid_attacks(self, _playable_ranks):
-        '''Given the current playable ranks, return a list of valid attacking cards that the Player can play next in the current round, assuming it is the player's turn.'''
-        result = []
-        for c in self.hand:
-            if c.rank in _playable_ranks:
-                result.append(c)
+        '''Given the current playable ranks, return a set of valid sets of attacking cards that the Player can play next in the current round, assuming it is the player's turn.'''
+        candidates = self.get_rank_classes()
+        result = set()
+        for c in candidates:
+            if c in _playable_ranks or not _playable_ranks:
+                for i in range(len(candidates[c])):
+                    result = result.union(set(frozenset(x) for x in itertools.combinations(candidates[c], i + 1)))
         return result
     
     def valid_defenses(self, _incoming):
-        '''Given the current incoming attacking cards, return a list of valid defences, in Set form (i.e. order does not matter).'''
+        '''Given the current incoming attacking cards, return a set of valid defences (i.e. order does not matter).'''
         beaters = [] # A list of tuples consisting of each incoming card, and a list of cards in the hand that beat them. 
         for i in range(len(_incoming)):
             beaters.append((_incoming[i], []))
@@ -374,4 +389,6 @@ if __name__ == "__main__":
     for i in range(6):
         p.hand.append(d.draw())
 
-    p.generate_defense([c1, c2], False)
+    print(p.get_rank_classes())
+
+    print(p.valid_attacks([]))

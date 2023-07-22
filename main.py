@@ -230,7 +230,7 @@ class HumanPlayer(Player):
             s = input("\nWhat would you like to attack with? Enter a sequence of as many numbers as attacking cards, representing the cards you want to use in the order you want to use them, separated by \
 spaces (for example, '1 2 4'), or 'pass' if you are done attacking:\n")
             indices = s.split(" ")
-            if not (s == 'surrender' or (all(x.isdigit() and int(x) <= self.num_cards() and int(x) != 0 for x in indices))): # An absolutely invalid input was made
+            if not (s == 'pass' or (all(x.isdigit() and int(x) <= self.num_cards() and int(x) != 0 for x in indices))): # An absolutely invalid input was made
                 print("Invalid input.")
             elif s == 'pass': # 'pass' was inputed
                 if not playable_ranks: # playable_ranks is empty, so this is the first attack of the round.
@@ -241,7 +241,8 @@ spaces (for example, '1 2 4'), or 'pass' if you are done attacking:\n")
             elif len(indices) > card_limit:
                 print("The opponent doesn't have enough cards to defend against that! Pick fewer cards.")
             else: # We have a valid numerical input
-                attack_attempt = frozenset([self.hand[int(i) - 1] for i in indices])
+                indices = [(int(x) - 1) for x in indices]
+                attack_attempt = frozenset([self.hand[i] for i in indices])
                 if attack_attempt in v_a:
                     invalid_input = False
                     result = attack_attempt
@@ -277,7 +278,7 @@ spaces (for example, '1 2 4'), or 'surrender' if you give up:\n")
                 result = None
             else: # We have a valid numerical input
                 indices = [(int(x) - 1) for x in indices]
-                defense_attempt = frozenset([self.hand[int(i) - 1] for i in indices])
+                defense_attempt = frozenset([self.hand[i] for i in indices])
                 if defense_attempt in v_d:
                     return defense_attempt
                 else: 
@@ -397,4 +398,5 @@ if __name__ == "__main__":
     for i in range(6):
         p.hand.append(d.draw())
 
-    p.generate_attack([], 6)
+    s = p.generate_defense([c1, c2], False)
+    print(s)

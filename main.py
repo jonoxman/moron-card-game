@@ -156,13 +156,14 @@ class Player:
             Takes a nonempty list of beating cards as generated above, as well as a Set representing the partial solution constructed at the current node.
             The algorithm is as follows: Take the first incoming card. Try to cover it with every possible option, removing this option from the other incoming cards' lists. Recurse, removing the first incoming card each time.
             Note that it is sufficient to consider the first card first, as in all valid defenses, this card must be covered at some point. '''
-            if not curr_beaters:
+            if not curr_beaters: # Base case
                 return frozenset([frozenset(curr_solution)]) # We use sets to reduce the space taken by multiple defenses in different orders (common occurrence with, say, multiple trumps)
             result = set()
-            curr_starter = curr_beaters.pop()
-            for card in curr_starter[1]: # Pick any of the cards needing defense
-                if card not in curr_solution:
-                    result = result.union(make_defense_tree(curr_beaters, curr_solution.union(set([card])))) # Call recursively - the set decreases in size by 1
+            curr_starter = curr_beaters.pop() # Pick any card to cover first
+            for card in curr_starter[1]: # Pick any of the cards that can cover it    
+                if card not in curr_solution: # Check if the card is already in use
+                    subtree_result = make_defense_tree(curr_beaters.copy(), curr_solution.union(set([card]))) # Call recursively - the set decreases in size by 1
+                    result = result.union(subtree_result)
             return frozenset(result) # If there are no solutions, we return an empty set. 
         result = make_defense_tree(beaters, set())
         foo = frozenset()
@@ -269,6 +270,7 @@ spaces (for example, '1 2 4'), or 'pass' if you are done attacking:\n")
         print(f"\nYour cards are:\n{nl.join(f'{i + 1}. {self.hand[i]}' for i in range(self.num_cards()))}")
         invalid_input = True
         v_d = self.valid_defenses(incoming)
+        print(f"DEBUG: {v_d}")
         while invalid_input:
             s = input("\nWhat would you like to defend with? Enter a sequence of as many numbers as attacking cards, representing the cards you want to use in the order you want to use them, separated by \
 spaces (for example, '1 2 4'), or 'surrender' if you give up:\n")
@@ -286,7 +288,6 @@ spaces (for example, '1 2 4'), or 'surrender' if you give up:\n")
                 else: 
                     #TODO: It would be good to be more verbose about *why* the defense failed (which card failed to be defended against, for example)
                     print(f"\nYou entered an invalid defense!\nYou are being attacked by the following cards: {', '.join(str(card) for card in incoming)}.\nIf you cannot defend yourself, you must surrender.")
-                    print(f"DEBUG: {v_d}")
         return result
 class Game:
     '''
@@ -396,7 +397,6 @@ class Game:
 
 if __name__ == "__main__":
     g = Game("Player 1", "Player 2")
-
     r = g.Round(g.player1, g.player2, g.deck)
 
     r.start_round()

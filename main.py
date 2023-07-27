@@ -113,7 +113,7 @@ class Player:
         self.name = name
      
     def num_cards(self):
-        '''Return True if the player's hand is empty, and False otherwise.'''
+        '''Return the number of cards in the player's hand.'''
         return len(self.hand)
     
     def get_rank_classes(self):
@@ -141,13 +141,14 @@ class Player:
     
     def valid_defenses(self, _incoming):
         '''Given the current incoming attacking cards, return a set of valid defences (i.e. order does not matter).'''
-        beaters = [] # A list of tuples consisting of each incoming card, and a list of cards in the hand that beat them. 
-        for i in range(len(_incoming)):
-            beaters.append((_incoming[i], []))
+        beaters = set() # A set of tuples, each consisting of each incoming card, and a set of cards in the hand that beat them. 
+        for inc in _incoming:
+            card_list = set()
             for c in self.hand:
-                if c > _incoming[i]:
-                    beaters[i][1].append(c)
-        # For each incoming card, we have a list of all cards that beat it. Now, we construct a defense by playing one card at a time.
+                if c > inc:
+                    card_list.add(c)
+            beaters.add((inc, frozenset(card_list)))
+        # For each incoming card, we have a set of all cards that beat it. Now, we construct a defense by playing one card at a time.
         # We will find valid defenses by means of a tree search. 
         
         def make_defense_tree(curr_beaters, curr_solution):
@@ -156,11 +157,12 @@ class Player:
             The algorithm is as follows: Take the first incoming card. Try to cover it with every possible option, removing this option from the other incoming cards' lists. Recurse, removing the first incoming card each time.
             Note that it is sufficient to consider the first card first, as in all valid defenses, this card must be covered at some point. '''
             if not curr_beaters:
-                return frozenset([frozenset(curr_solution)]) # We use sets to reduce the space taken by, multiple defenses in different orders (common occurrence with, say, multiple trumps)
+                return frozenset([frozenset(curr_solution)]) # We use sets to reduce the space taken by multiple defenses in different orders (common occurrence with, say, multiple trumps)
             result = set()
-            for card in curr_beaters[0][1]:
+            curr_starter = curr_beaters.pop()
+            for card in curr_starter[1]: # Pick any of the cards needing defense
                 if card not in curr_solution:
-                    result = result.union(make_defense_tree(curr_beaters[1:], curr_solution.union(set([card]))))
+                    result = result.union(make_defense_tree(curr_beaters, curr_solution.union(set([card])))) # Call recursively - the set decreases in size by 1
             return frozenset(result) # If there are no solutions, we return an empty set. 
         result = make_defense_tree(beaters, set())
         foo = frozenset()
@@ -211,7 +213,7 @@ class HumanPlayer(Player):
 
     def generate_attack(self, playable_ranks, card_limit):
         '''Generates an attack (in the case of the human player, "generation" is made via user input).
-        Takes a parameter of the current card pool (i.e. which cards have been played this round). If this parameter is an empty list, any card may be played.
+        Takes a parameter of the current list of playable ranks (i.e. which ranks have been played this round). If this parameter is an empty list, any card may be played.
         Also takes a parameter representing the maximum number of cards that can be played (i.e. how many cards the defender will have in their hand)
         Returns a tuple consisting the card to be played, and its position in the hand after sorting. 
         A return value of None indicates that the attacker does not wish to continue the attack.
@@ -222,7 +224,7 @@ class HumanPlayer(Player):
         if not playable_ranks:
             print ("\nNo cards have been played yet, so you may attack with any rank.")
         else:
-            print (f"\nIn this round so far, cards with rank {', '.join(Card.rank_to_name(rank) for rank in playable_ranks)} have been played.")
+            print (f"\nIn this round so far, the following ranks have been played: {', '.join(Card.rank_to_name(rank) for rank in sorted(set(playable_ranks)))}")
         print(f"\nYour cards are:\n{nl.join(f'{i + 1}. {self.hand[i]}' for i in range(self.num_cards()))}")
         invalid_input = True
         v_a = self.valid_attacks(playable_ranks)
@@ -250,7 +252,7 @@ spaces (for example, '1 2 4'), or 'pass' if you are done attacking:\n")
                     if not playable_ranks:
                         print("As your first attack, you may only play cards of a single rank.")
                     else:
-                        print(f"You tried to play a rank that's not available! The available plays are: {', '.join(f'{Card.rank_to_name(rank)}' for rank in playable_ranks)}")
+                        print(f"You tried to play a rank that's not available! The available plays are: {', '.join(f'{Card.rank_to_name(rank)}' for rank in sorted(set(playable_ranks)))}")
         return result
 
     def generate_defense(self, incoming, ref_allowed):
@@ -284,6 +286,7 @@ spaces (for example, '1 2 4'), or 'surrender' if you give up:\n")
                 else: 
                     #TODO: It would be good to be more verbose about *why* the defense failed (which card failed to be defended against, for example)
                     print(f"\nYou entered an invalid defense!\nYou are being attacked by the following cards: {', '.join(str(card) for card in incoming)}.\nIf you cannot defend yourself, you must surrender.")
+                    print(f"DEBUG: {v_d}")
         return result
 class Game:
     '''
@@ -313,7 +316,7 @@ class Game:
             self.attacker = p1
             self.defender = p2
             self.deck = d
-            self.attacking_cards = []
+            self.attacking_cards = None
             self.card_pool = []
             self.result = None
         
@@ -338,11 +341,14 @@ class Game:
             if defender_turn:
                 p = self.defender
                 s = "defending"
-                sentence = f"You need to defend against {', '.join(card for card in self.attacking_cards)}."
+                sentence = f"You need to defend against {', '.join(str(card) for card in self.attacking_cards)}." # This list is never empty, so no problems here
             else:
                 p = self.attacker
                 s = "attacking"
-                sentence = f"The cards that have been played so far are {', '.join(card for card in self.card_pool)}."
+                if not self.card_pool:
+                    sentence = "No cards have been played yet."
+                else:
+                    sentence = f"The cards that have been played so far are {', '.join(str(card) for card in self.card_pool)}."
 
             result = f"{p.name}, it's your turn. You are currently {s}. {sentence}"
             return result
@@ -352,15 +358,15 @@ class Game:
             # It's the attacker's turn first.
             winner = None
             while not winner:
-                print(self.round_info(), False)
-                attack = self.attacker.generate_attack()
-                if not attack: # In the first loop, generate_attack does not allow this case
+                print(self.round_info(False))   
+                self.attacking_cards = self.attacker.generate_attack(list((card.rank for card in self.card_pool)), len(self.attacker.hand))
+                if not self.attacking_cards: # In the first loop, generate_attack does not allow this case
                     winner = self.defender
                     break
                 else:
-                    self.execute_move(self.attacker, attack)
-                print(self.round_info(), True)
-                defense = self.defender.generate_defense()
+                    self.execute_move(self.attacker, self.attacking_cards)
+                print(self.round_info(True))
+                defense = self.defender.generate_defense(self.attacking_cards, False)
                 if not defense:
                     winner = self.attacker
                     break
@@ -379,6 +385,9 @@ class Game:
         self.deck.shuffle()
         self.deck.choose_trump()
         self.trump = self.deck.trump_card.suit
+        for _ in itertools.repeat(None, 6):
+            self.player1.hand.append(self.deck.draw())
+            self.player2.hand.append(self.deck.draw())
         self.winning_player = None
 
     #def start_game(self): 
@@ -386,17 +395,8 @@ class Game:
        # while not self.winning_player: # Game loop
 
 if __name__ == "__main__":
-    d = Deck()
-    d.shuffle()
-    d.choose_trump()
+    g = Game("Player 1", "Player 2")
 
-    c1 = d.draw()
-    c2 = d.draw()
+    r = g.Round(g.player1, g.player2, g.deck)
 
-    print(f"Trumps are {d.trump_card}")
-    p = HumanPlayer("Player")
-    for i in range(6):
-        p.hand.append(d.draw())
-
-    s = p.generate_defense([c1, c2], False)
-    print(s)
+    r.start_round()

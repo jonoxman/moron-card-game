@@ -117,9 +117,9 @@ class Player(abc.ABC):
         A return value of None indicates that the defender has surrendered.'''
         return None
 
-    def playable_cards(self, _playable_ranks):
+    def rank_classes(self):
         '''
-        Takes a set of ranks that are currently playable. Returns a set of all cards with such ranks. 
+        Returns a dict with keys being ranks of cards in hand, and values being sets of such cards with that rank. Helper method for valid_attacks.
         '''
         result = {}
         for card in self.hand:
@@ -130,15 +130,23 @@ class Player(abc.ABC):
                 result[card.rank].add(card)
         return result
 
+    def playable_cards(self, _playable_ranks):
+        '''Takes a set of ranks. Returns a set containing all cards in the hand with one of those ranks.'''
+        return set((card for card in self.hand if card.rank in _playable_ranks))
+
     def valid_attacks(self, _playable_ranks, length_limit):
         '''Takes a set of currently playable ranks, and an additional parameter representing the number of cards the defender has, i.e. the maximum number of cards that can be played by the attacker.
         Returns a set of valid sets of attacking cards that the Player can play next in the current round, assuming it is the player's turn.'''
-        candidates = self.get_rank_classes()
         result = set()
-        for c in candidates:
-            if c in _playable_ranks or not _playable_ranks:
-                for i in range(len(candidates[c])):
+        if not _playable_ranks:
+            candidates = self.rank_classes()
+            for c in candidates:
+                for i in range(min(len(candidates[c]), length_limit)):
                     result = result.union(set(frozenset(x) for x in itertools.combinations(candidates[c], i + 1)))
+        else:
+            playable = self.playable_cards(_playable_ranks)
+            for i in range(length_limit):
+                result = result.union(set(frozenset(x) for x in itertools.combinations(playable, i + 1)))
         return result
     
     def valid_defenses(self, _incoming):
@@ -221,7 +229,7 @@ class HumanPlayer(Player):
             print (f"\nIn this round so far, the following ranks have been played: {', '.join(Card.rank_name(rank) for rank in sorted(set(playable_ranks)))}")
         print(f"\nYour cards are:\n{nl.join(f'{i + 1}. {self.hand[i]}' for i in range(self.num_cards()))}")
         invalid_input = True
-        v_a = self.valid_attacks(playable_ranks)
+        v_a = self.valid_attacks(playable_ranks, card_limit)
         while invalid_input:
             s = input("\nWhat would you like to attack with? Enter a sequence of as many numbers as attacking cards, representing the cards you want to use in the order you want to use them, separated by \
 spaces (for example, '1 2 4'), or 'pass' if you are done attacking:\n")
@@ -263,7 +271,6 @@ spaces (for example, '1 2 4'), or 'pass' if you are done attacking:\n")
         print(f"\nYour cards are:\n{nl.join(f'{i + 1}. {self.hand[i]}' for i in range(self.num_cards()))}")
         invalid_input = True
         v_d = self.valid_defenses(incoming)
-        print(f"DEBUG: {v_d}")
         while invalid_input:
             s = input("\nWhat would you like to defend with? Enter a sequence of as many numbers as attacking cards, representing the cards you want to use in the order you want to use them, separated by \
 spaces (for example, '1 2 4'), or 'surrender' if you give up:\n")

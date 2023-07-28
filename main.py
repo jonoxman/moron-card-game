@@ -1,9 +1,10 @@
 import random
 import itertools
+import abc
 
 class Card:
     '''
-    A Card is a data class that stores a rank and a suit. It also knows whether it is a trump or not.
+    A Card is a data class that stores the rank, suit, and trump status of a card. Cards may be compared to each other as in the rules of the game.
     '''
     def __init__(self, rank, suit):
         self.rank = rank
@@ -11,9 +12,10 @@ class Card:
         self.is_trump = False
 
     @staticmethod
-    def rank_to_name(rank):
+    def rank_name(rank):
         '''
-        Return the English name of a card's rank, given the rank id (named cards are internally stored as numbers above 10).
+        Takes a card's rank id (named cards are internally stored as numbers above 10).
+        Return the English name of a card's rank.
         '''
         match rank:
             case 11:
@@ -26,30 +28,13 @@ class Card:
                 return "Ace"
             case _:
                 return str(rank)
-            
+
     @staticmethod
-    def lt_several(first, second):
+    def suit_name(suit):
         '''
-        Precondition: first and second have the same length.
-        Given two lists of cards of equal length, compare them pairwise by index. Returns True if in every pair, the first card is less than the second card.
-        Returns False otherwise. 
+        Return the English name of the card's suit (internally, the suits are stored as numbers).
         '''
-        for i in range(len(first)):
-            if not (first[i] < second[i]):
-                return False
-        return True
-
-    def rank_name(self):
-        '''
-        Return the English name of the card's rank (named cards are internally stored as numbers above 10).
-        '''
-        return Card.rank_to_name(self.rank)
-
-    def suit_name(self):
-        '''
-        Return the English  name of the card's suit (internally, the suits are stored as numbers).
-        '''
-        match self.suit:
+        match suit:
             case 0:
                 return "Spades"
             case 1: 
@@ -70,10 +55,10 @@ class Card:
 
     def __repr__(self):
         if self.is_trump: # In this case, highlight the card a bit more
-            result = f"***{self.rank_name()} of {self.suit_name()}***"
+            result = f"***{Card.rank_name(self.rank)} of {Card.suit_name(self.suit)}***"
             return result.upper()
         else: 
-            return f"{self.rank_name()} of {self.suit_name()}"
+            return f"{Card.rank_name(self.rank)} of {Card.suit_name(self.suit)}"
 class Deck:
     '''
     A Deck is a class that stores a list of 36 cards, from 6s to aces, of each suit.
@@ -85,12 +70,9 @@ class Deck:
         for s in range(0, 4): # suits range from 0 to 3, and their names are stored internally in the card
             for i in range(6, 15): # ranks range from 6 to 14, where jack = 11, queen = 12, king = 13, ace = 14
                 self.cards.append(Card(i, s)) #add cards to the deck in order
-
-    def num_cards(self):
-        return len(self.cards)
     
     def shuffle(self):
-        '''Shuffle the cards stored in this deck.'''
+        '''Randomly shuffle the cards stored in this deck.'''
         random.shuffle(self.cards)
 
     def draw(self):
@@ -106,8 +88,9 @@ class Deck:
                 c.is_trump = True
 
 
-class Player:
-    '''A Player is a class representing one of the players of the game.'''
+class Player(abc.ABC):
+    '''A Player is an abstract class representing one of the players of the game.
+    Player should always be instantiated as a subclass, representing the type of player (i.e. how the computer/human player decides its moves)'''
     def __init__(self, name):
         self.hand = []
         self.name = name
@@ -116,9 +99,27 @@ class Player:
         '''Return the number of cards in the player's hand.'''
         return len(self.hand)
     
-    def get_rank_classes(self):
+    @abc.abstractmethod
+    def generate_attack(self, playable_ranks, card_limit):
+        '''Takes a parameter of the current list of playable ranks (i.e. which ranks have been played this round). If this parameter is an empty list, any card may be played.
+        Also takes a parameter representing the maximum number of cards that can be played (i.e. how many cards the defender will have in their hand)
+        Generates an attack using a Player-specific algorithm.
+        Returns a tuple consisting of the card to be played, and its position in the hand after sorting. 
+        A return value of None indicates that the attacker does not wish to continue the attack.'''
+        return None
+
+    @abc.abstractmethod
+    def generate_defense(self, incoming):
+        '''Takes a parameter of the incoming cards (i.e. which cards must be defended against.), and whether a reflection is allowed (i.e. if this is the first defense of the round).
+        Generates a defense using a Player-specific algorithm.
+        Returns a tuple consisting of a list of cards to be played from the player's hand, 
+        and a list with the indices of the cards being played in the hand after sorting.
+        A return value of None indicates that the defender has surrendered.'''
+        return None
+
+    def playable_cards(self, _playable_ranks):
         '''
-        Returns a dict with keys being ranks of cards in hand, and values being a set of all cards in the hand with rank being the key. 
+        Takes a set of ranks that are currently playable. Returns a set of all cards with such ranks. 
         '''
         result = {}
         for card in self.hand:
@@ -129,8 +130,9 @@ class Player:
                 result[card.rank].add(card)
         return result
 
-    def valid_attacks(self, _playable_ranks):
-        '''Given the current playable ranks, return a set of valid sets of attacking cards that the Player can play next in the current round, assuming it is the player's turn.'''
+    def valid_attacks(self, _playable_ranks, length_limit):
+        '''Takes a set of currently playable ranks, and an additional parameter representing the number of cards the defender has, i.e. the maximum number of cards that can be played by the attacker.
+        Returns a set of valid sets of attacking cards that the Player can play next in the current round, assuming it is the player's turn.'''
         candidates = self.get_rank_classes()
         result = set()
         for c in candidates:
@@ -140,7 +142,8 @@ class Player:
         return result
     
     def valid_defenses(self, _incoming):
-        '''Given the current incoming attacking cards, return a set of valid defences (i.e. order does not matter).'''
+        '''Takes a set of incoming attacking cards.
+        Returns a set of valid defences (i.e. order does not matter).'''
         beaters = set() # A set of tuples, each consisting of each incoming card, and a set of cards in the hand that beat them. 
         for inc in _incoming:
             card_list = set()
@@ -152,10 +155,12 @@ class Player:
         # We will find valid defenses by means of a tree search. 
         
         def make_defense_tree(curr_beaters, curr_solution):
-            '''Recursively generate a tree of all possible defenses. Return a list of all values of leaves in the tree, from the given current node.
+            '''
             Takes a nonempty list of beating cards as generated above, as well as a Set representing the partial solution constructed at the current node.
+            Recursively generates a tree of all possible defenses. Returns a list of all values of leaves in the tree, from the given current node.
             The algorithm is as follows: Take the first incoming card. Try to cover it with every possible option, removing this option from the other incoming cards' lists. Recurse, removing the first incoming card each time.
-            Note that it is sufficient to consider the first card first, as in all valid defenses, this card must be covered at some point. '''
+            Note that it is sufficient to consider the first card first, as in all valid defenses, this card must be covered at some point. 
+            '''
             if not curr_beaters: # Base case
                 return frozenset([frozenset(curr_solution)]) # We use sets to reduce the space taken by multiple defenses in different orders (common occurrence with, say, multiple trumps)
             result = set()
@@ -177,10 +182,8 @@ class Player:
 
     def sort_hand(self):
         '''Sort the player's hand by suit, and by ascending order of value within each suit.'''
-
         # Sort by rank, except for trumps - put them at the end of the hand. 
         self.hand.sort(key=lambda card: card.rank) #Sort the hand in ascending order by rank
-
         trumps = []
         i = 0 
         # This is a little awkward. I don't want to use a usual for loop with range, because I want to decrement the index when necessary. It's either this, or a while loop.
@@ -192,17 +195,7 @@ class Player:
                 i += 1
         
         self.hand.extend(trumps) #Place all trumps at the end
-        """ 
-        # Sort by suits, and then sort by rank within each suit. 
-        spades, hearts, clubs, diamonds = suitlist = [[] for _ in range(4)]
-        for c in self.hand:
-            suitlist[c.suit].append(c) # Split the hand into suits
 
-        for s in suitlist:
-            s.sort(key=lambda card: card.rank) #Sort each suit in ascending order
-
-        self.hand = list(itertools.chain.from_iterable(suitlist)) # Join suits back into one hand.  """
-        
     def __str__(self):
         '''Overridden to output the player's hand, separated by new lines.'''
         return "\n".join(self.hand)
@@ -213,9 +206,9 @@ class HumanPlayer(Player):
         super().__init__(name)
 
     def generate_attack(self, playable_ranks, card_limit):
-        '''Generates an attack (in the case of the human player, "generation" is made via user input).
-        Takes a parameter of the current list of playable ranks (i.e. which ranks have been played this round). If this parameter is an empty list, any card may be played.
+        '''Takes a parameter of the current list of playable ranks (i.e. which ranks have been played this round). If this parameter is an empty list, any card may be played.
         Also takes a parameter representing the maximum number of cards that can be played (i.e. how many cards the defender will have in their hand)
+        Generates an attack (in the case of the human player, "generation" is made via user input).
         Returns a tuple consisting the card to be played, and its position in the hand after sorting. 
         A return value of None indicates that the attacker does not wish to continue the attack.
         '''
@@ -225,7 +218,7 @@ class HumanPlayer(Player):
         if not playable_ranks:
             print ("\nNo cards have been played yet, so you may attack with any rank.")
         else:
-            print (f"\nIn this round so far, the following ranks have been played: {', '.join(Card.rank_to_name(rank) for rank in sorted(set(playable_ranks)))}")
+            print (f"\nIn this round so far, the following ranks have been played: {', '.join(Card.rank_name(rank) for rank in sorted(set(playable_ranks)))}")
         print(f"\nYour cards are:\n{nl.join(f'{i + 1}. {self.hand[i]}' for i in range(self.num_cards()))}")
         invalid_input = True
         v_a = self.valid_attacks(playable_ranks)
@@ -253,12 +246,12 @@ spaces (for example, '1 2 4'), or 'pass' if you are done attacking:\n")
                     if not playable_ranks:
                         print("As your first attack, you may only play cards of a single rank.")
                     else:
-                        print(f"You tried to play a rank that's not available! The available plays are: {', '.join(f'{Card.rank_to_name(rank)}' for rank in sorted(set(playable_ranks)))}")
+                        print(f"You tried to play a rank that's not available! The available plays are: {', '.join(f'{Card.rank_name(rank)}' for rank in sorted(set(playable_ranks)))}")
         return result
 
     def generate_defense(self, incoming, ref_allowed):
-        '''Generates a defense (in the case of the human player, "generation" is made via user input).
-        Takes a parameter of the incoming cards (i.e. which cards must be defended against.), and whether a reflection is allowed (i.e. if this is the prospective first defense of the round).
+        '''Takes a parameter of the incoming cards (i.e. which cards must be defended against.), and whether a reflection is allowed (i.e. if this is the first defense of the round).
+        Generates a defense (in the case of the human player, "generation" is made via user input).
         Returns a tuple consisting of a list of cards to be played from the player's hand, 
         and a list with the indices of the cards being played in the hand after sorting.
         A return value of None indicates that the defender has surrendered. 
@@ -322,8 +315,9 @@ class Game:
             self.result = None
         
         def execute_move(self, player, _cards):
-            '''Execute a move, passed in as a parameter in the form of the player moving, and the cards they are using.
-            This method assumes that the specified move is valid - this should be verified before calling this method.'''
+            '''Takes a Player object as the player moving, and a set of cards they are using.
+            Execute the move described by these parameters.
+            PRECONDITION: This method assumes that the specified move is valid - this should be verified before calling this method.'''
             cards = set(_cards)
             player.hand = list(set(player.hand) - cards)
             self.card_pool.extend(cards)
@@ -331,6 +325,7 @@ class Game:
 
         def round_info(self, defender_turn):
             '''
+            Takes whether or not it is the defender's turn, in the form of a boolean.
             Returns information about current status of the round in String form. (This is a helper method for output only.)
             The status includes:
             - The name of the player whose move it is, and their current position (attacker or defender). 
@@ -356,11 +351,13 @@ class Game:
 
 
         def start_round(self):
+            '''Starts the round, using the setup from the initializer. This is the main method for the Round class.'''
+
             # It's the attacker's turn first.
             winner = None
             while not winner:
                 print(self.round_info(False))   
-                self.attacking_cards = self.attacker.generate_attack(list((card.rank for card in self.card_pool)), len(self.attacker.hand))
+                self.attacking_cards = self.attacker.generate_attack(set((card.rank for card in self.card_pool)), len(self.attacker.hand))
                 if not self.attacking_cards: # In the first loop, generate_attack does not allow this case
                     winner = self.defender
                     break

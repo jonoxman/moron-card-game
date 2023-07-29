@@ -4,7 +4,7 @@ import abc
 
 class Card:
     '''
-    A Card is a data class that stores the rank, suit, and trump status of a card. Cards may be compared to each other as in the rules of the game.
+    The Card class stores the rank, suit, and trump status of a card. Cards may be compared to each other as in the rules of the game.
     '''
     def __init__(self, rank, suit):
         self.rank = rank
@@ -106,7 +106,7 @@ class Player(abc.ABC):
         Generates an attack using a Player-specific algorithm.
         Returns a tuple consisting of the card to be played, and its position in the hand after sorting. 
         A return value of None indicates that the attacker does not wish to continue the attack.'''
-        return None
+        raise NotImplementedError
 
     @abc.abstractmethod
     def generate_defense(self, incoming):
@@ -115,7 +115,7 @@ class Player(abc.ABC):
         Returns a tuple consisting of a list of cards to be played from the player's hand, 
         and a list with the indices of the cards being played in the hand after sorting.
         A return value of None indicates that the defender has surrendered.'''
-        return None
+        raise NotImplementedError
 
     def rank_classes(self):
         '''
@@ -182,7 +182,6 @@ class Player(abc.ABC):
         foo = frozenset()
         if foo in result:
             result.remove(foo)
-
         return result
     
     def valid_reflections(self): #TODO
@@ -210,8 +209,77 @@ class Player(abc.ABC):
 
 class HumanPlayer(Player):
     '''A HumanPlayer is a Player that can take user input for moves.'''
+    ATTACK_STRINGS = {
+        'initial_prompt_first':"\nWhat would you like to attack with? Enter a sequence of as many numbers as attacking cards, representing the cards you want to use in the order you want to use them, separated by \
+spaces (for example, '1 2 4'). You cannot yield on the first attack of the round.:\n", 
+        'initial_prompt': "\nWhat would you like to attack with? Enter a sequence of as many numbers as attacking cards, representing the cards you want to use in the order you want to use them, separated by \
+spaces (for example, '1 2 4'), or 'yield' if you are done attacking:\n",
+        'special_fail':"You cannot pass on your first attack of the round!", 
+        'length_fail':"The opponent doesn't have enough cards to defend against that! Pick fewer cards.",
+        'multi_rank_fail':"As your first attack, you may only play cards of a single rank.",
+        'valid_input_fail_1':"\nYou tried to play a rank that's not available! The available plays are: ",
+        'valid_input_fail_2':"\nIf you have no more playable cards, you must yield."
+    }
+
+    DEFENSE_STRINGS = {
+        'initial_prompt':"\nWhat would you like to defend with? Enter a sequence of as many numbers as attacking cards, representing the cards you want to use in the order you want to use them, separated by \
+spaces (for example, '1 2 4'), or 'yield' if you give up:\n",
+        'special_fail':"You cannot reflect after you've defended against a card!",
+        'length_fail':"You did not input the correct number of cards! Pick the same number of cards as you are being attacked by.",
+        'valid_input_fail_1': "\nYou entered an invalid defense!\nYou are being attacked by the following cards: ",
+        'valid_input_fail_2': "\nIf you cannot defend yourself, you must yield."
+    }
+
     def __init__(self, name):
         super().__init__(name)
+
+    def card_input_helper(self, input_prompts, valid_responses, card_param, accepted_lengths):
+        '''
+        A helper that takes three parameters: The first being a list of strings, which are the human-facing instructions which are context-dependent (based on who is attacking).
+        The second parameter is a set of cards that is acceptable via the input. This should be generated using Player's valid_attacks and valid_defenses methods.
+        The third parameter depends on the calling method. If called by generate_attack, it is a list of playable ranks, in named form. If called by generate_defense, it is a list of incoming cards.
+        The fourth parameter is a list of accepted lengths. 
+        Prints the strings in the first parameter in order, and takes input, validating the input based on the second parameter. Once successful input is made,
+        returns a set containing the cards indicated by the input. (This set can be directly passed into Game's execute_move method.)
+        '''
+        invalid_input = True
+        while invalid_input:
+            if not card_param: # card_param is empty, so it must be the first attack of the round
+                s = input(input_prompts['initial_prompt_first'])
+            else:
+                s = input(input_prompts['initial_prompt'])
+            indices = s.split(" ")
+            if not (s == 'yield' or (all(x.isdigit() and int(x) <= self.num_cards() and int(x) != 0 for x in indices))): # An absolutely invalid input was made
+                print("Invalid input.")
+            elif s == 'yield':
+                if not card_param: # This can only happen on the attack
+                    print(input_prompts['special_fail'])
+                else:
+                    invalid_input = False
+                    result = None
+            elif len(indices) not in accepted_lengths:
+                print(input_prompts['length_fail'])
+            else: # We have a valid numerical input
+                indices = [(int(x) - 1) for x in indices]
+                move_attempt = frozenset([self.hand[i] for i in indices])
+                if move_attempt in valid_responses:
+                    invalid_input = False
+                    result = move_attempt
+                else: # If we got here, we tried to play a disallowed move. 
+                    if not card_param:
+                        print(input_prompts['multi_rank_fail'])
+                    else:
+                        comp_str = input_prompts['valid_input_fail_1']
+                        test_entry = next(iter(card_param))
+                        if type(test_entry) is int:
+                            comp_str += ', '.join(f'{Card.rank_name(entry)}' for entry in card_param)
+                        elif type(test_entry) is Card:
+                            comp_str += ', '.join(f'{str(entry)}' for entry in card_param)
+                        else:
+                            raise TypeError("card_param must be integers or Cards")
+                        comp_str += input_prompts['valid_input_fail_2']
+                        print(comp_str)
+        return result
 
     def generate_attack(self, playable_ranks, card_limit):
         '''Takes a parameter of the current list of playable ranks (i.e. which ranks have been played this round). If this parameter is an empty list, any card may be played.
@@ -228,33 +296,8 @@ class HumanPlayer(Player):
         else:
             print (f"\nIn this round so far, the following ranks have been played: {', '.join(Card.rank_name(rank) for rank in sorted(set(playable_ranks)))}")
         print(f"\nYour cards are:\n{nl.join(f'{i + 1}. {self.hand[i]}' for i in range(self.num_cards()))}")
-        invalid_input = True
         v_a = self.valid_attacks(playable_ranks, card_limit)
-        while invalid_input:
-            s = input("\nWhat would you like to attack with? Enter a sequence of as many numbers as attacking cards, representing the cards you want to use in the order you want to use them, separated by \
-spaces (for example, '1 2 4'), or 'pass' if you are done attacking:\n")
-            indices = s.split(" ")
-            if not (s == 'pass' or (all(x.isdigit() and int(x) <= self.num_cards() and int(x) != 0 for x in indices))): # An absolutely invalid input was made
-                print("Invalid input.")
-            elif s == 'pass': # 'pass' was inputed
-                if not playable_ranks: # playable_ranks is empty, so this is the first attack of the round.
-                    print("You cannot pass on your first attack of the round!")
-                else:
-                    invalid_input = False
-                    result = None
-            elif len(indices) > card_limit:
-                print("The opponent doesn't have enough cards to defend against that! Pick fewer cards.")
-            else: # We have a valid numerical input
-                indices = [(int(x) - 1) for x in indices]
-                attack_attempt = frozenset([self.hand[i] for i in indices])
-                if attack_attempt in v_a:
-                    invalid_input = False
-                    result = attack_attempt
-                else: # If we got here, playable_ranks is not empty, so this will never look bad
-                    if not playable_ranks:
-                        print("As your first attack, you may only play cards of a single rank.")
-                    else:
-                        print(f"You tried to play a rank that's not available! The available plays are: {', '.join(f'{Card.rank_name(rank)}' for rank in sorted(set(playable_ranks)))}")
+        result = self.card_input_helper(HumanPlayer.ATTACK_STRINGS, v_a, playable_ranks, range(card_limit))
         return result
 
     def generate_defense(self, incoming, ref_allowed):
@@ -269,25 +312,8 @@ spaces (for example, '1 2 4'), or 'pass' if you are done attacking:\n")
         print(f"\n{self.name}, you have {self.num_cards()} cards. ")
         print(f"\nYou are being attacked by the following cards: {', '.join(str(card) for card in incoming)}")
         print(f"\nYour cards are:\n{nl.join(f'{i + 1}. {self.hand[i]}' for i in range(self.num_cards()))}")
-        invalid_input = True
         v_d = self.valid_defenses(incoming)
-        while invalid_input:
-            s = input("\nWhat would you like to defend with? Enter a sequence of as many numbers as attacking cards, representing the cards you want to use in the order you want to use them, separated by \
-spaces (for example, '1 2 4'), or 'surrender' if you give up:\n")
-            indices = s.split(" ")
-            if not (s == 'surrender' or (all(x.isdigit() and int(x) <= self.num_cards() and int(x) != 0 for x in indices)) and len(indices) == len(incoming)): # An absolutely invalid input was made
-                print("Invalid input.")
-            elif s == 'surrender': # 'surrender' was inputted
-                invalid_input = False
-                result = None
-            else: # We have a valid numerical input
-                indices = [(int(x) - 1) for x in indices]
-                defense_attempt = frozenset([self.hand[i] for i in indices])
-                if defense_attempt in v_d:
-                    return defense_attempt
-                else: 
-                    #TODO: It would be good to be more verbose about *why* the defense failed (which card failed to be defended against, for example)
-                    print(f"\nYou entered an invalid defense!\nYou are being attacked by the following cards: {', '.join(str(card) for card in incoming)}.\nIf you cannot defend yourself, you must surrender.")
+        result = self.card_input_helper(HumanPlayer.DEFENSE_STRINGS, v_d, incoming, [len(incoming)])
         return result
 class Game:
     '''
